@@ -1,5 +1,5 @@
 'use strict';
-
+const bcrypt = require('bcrypt-nodejs');
 const Hapi = require('hapi');
 
 const server = new Hapi.Server();
@@ -12,8 +12,8 @@ var connection = mysql.createConnection({
 
     //host will be the name of the service from the docker-compose file. 
     host     : 'mysql',
-    user     : 'adam',
-    password : 'ashcraft',
+    user     : 'casey',
+    password : 'password',
     database : 'foodapp'
 });
 
@@ -23,9 +23,81 @@ server.route({
     path: '/',
     handler: function (request, reply) {
         console.log('Server processing a / request');
-        reply('Hello, World!');
+        var varia = {
+            response: "Hello World"
+        };
+        reply(varia);
     }
 });
+
+////////////Account Stuff///////////////
+
+//login
+server.route({
+	method: 'POST',
+	path: '/login',
+	handler: function(request, reply) {
+        var user = request.payload['username'];
+        var pass = request.payload['password']; 
+        var sql = "SELECT * FROM foodapp.account WHERE username = ?";
+        connection.query(sql, user, function(error, results, fields) {
+            if (error)
+                throw error;
+            else{
+                if(results.length >0){
+                    bcrypt.compare(pass, results[0].password, function(err, ress) {
+                        if(!ress){
+                            reply("Email and password does not match");
+                        }else{
+                            reply('successfully authenticated');
+                        }
+                    });
+                }
+                else{
+                    reply("Email does not exits");
+                }
+                
+            }
+            
+        });
+
+	}
+});
+
+//Add a new user to database
+server.route({
+	method: 'POST',
+	path: '/newuser',
+	handler: function(request, reply) {
+        
+        var salt = bcrypt.genSaltSync(10);
+        var hash = bcrypt.hashSync(request.payload['password'], salt);
+
+        var value = {
+            "fName": request.payload['fName'],
+            "lName": request.payload['lName'],
+            "username": request.payload['username'],
+            "password": hash
+
+        }
+        var sql = 'INSERT INTO foodapp.account SET ?';
+
+		connection.query(sql, value, function(err, result) {
+            if(err) {
+                throw err;
+            } 
+            reply ('User Added: ' + request.payload['fName'] + ', ' + request.payload['lName'] + ' as ' + request.payload['username'] + ' with password "' + request.payload['password'] + '"');
+        });
+		
+	}
+});
+
+/////////////////////////////////////////////////
+
+
+
+
+
 
 //A new route to test connectivity to MySQL
 server.route({
@@ -34,108 +106,307 @@ server.route({
     handler: function (request, reply) {
         console.log('Server processing a /getData request');
 
-        //Creates the connection
-
-        //Does a simple select, not from a table, but essentially just uses MySQL
-        //to add 1 + 1.
-        //function (error, results, fields){...} is a call-back function that the
-        //MySQL lib uses to send info back such as if there was an error, and/or the
-        //actual results.
-        connection.query('SELECT 1 + 1 AS solution', function (error, results, fields) {
+        connection.query('SELECT * FROM foodapp.account', function (error, result, fields) {
             if (error)
                 throw error;
             //Sends back to the client the value of 1 + 1
-            reply ('The solution is ' + results[0].solution);
+            reply ('User account Name is: ' + result[0].fName);
 
             //for exemplar purposes, stores the returned value in a variable to be
             //printed to log
-            var solution = results[0].solution;
+            var solution = result;
             console.log('The solution is: ', solution);
         });
-        //close the connection to MySQL
+       
     }
 });
 
+//get a user
+server.route({
+	method: 'GET',
+	path: '/user/{username}',
+	handler: function(request, reply) {
+        var name = request.params.username;
+
+        var sql = "SELECT * FROM foodapp.account WHERE username = ?";
+        var userStuff;
+        connection.query(sql, name, function(error, result, fields) {
+            if (error)
+                throw error;
+            userStuff = result[0];
+            console.log(userStuff);
+            reply (userStuff);
+        });
+
+	}
+});
+
+//get a restaurant
+server.route({
+	method: 'GET',
+	path: '/restaurant/{id}',
+	handler: function(request, reply) {
+        var id = request.params.id;
+
+        var sql = "SELECT * FROM foodapp.restaurant WHERE idrestaurant = ?";
+        var userStuff;
+        connection.query(sql, id, function(error, result, fields) {
+            if (error)
+                throw error;
+            userStuff = result[0];
+            console.log(userStuff);
+            reply (userStuff);
+        });
+
+	}
+});
+
+// return all food
 server.route({
     method: 'GET',
-    path: '/getusername',
+    path: '/getFood',
     handler: function (request, reply) {
-        console.log('Server processing a /getusername request');
-	    connection.query('SELECT * FROM foodapp.account', function(error, result, fields) {
-			if (error)
-				throw error;
-			reply ('User account Name is ' + result[0].uName);
-			var solution = result;
-			console.log('The return is ', solution);
-		});
+        console.log('Server processing a /getFood request');
+
+        connection.query('SELECT * FROM foodapp.food', function (error, result, fields) {
+            if (error)
+                throw error;
+            var output = [];
+            for (var x = 0; x < result.length; x++ ) {
+                 output.push(result[x]);
+            };
+            
+            reply (output);
+            
+            var solution = result;
+            console.log('The solution is: ', solution);
+        });
+       
     }
 });
 
+// return menu for specifc restuarant
 server.route({
-	method: 'GET',
-	path: '/food',
-	handler: function(request, reply) {
-		console.log('Server processing a /food request');
-		connection.query('SELECT * FROM foodapp.food', function(error, result, fields) {
-			if (error)
-				throw error;
-			var str = '';
-			var header = "The results are ordered by Name, Type, Group, Amount Remaining, Amount Sold, and Cost\n";
-			str = str + header;
-			var iLength = result.length;
-			console.log(obj)
-			for (var i = 0; i < iLength; i++) {
-				var obj = result[i];
-				console.log("Obj: " + JSON.stringify(obj, null, 4));
-				var strTemp = ('Name: ' + obj.foodName + ', Type: ' + obj.foodType + ', Group: ' + obj.foodGroup + ', Amount: ' + obj.foodAmount + ', Sold: ' + obj.amountSold + ', Cost: ' + obj.foodCost + '\n');
-				str = str + strTemp;
-				var solution = result[i];
-				console.log('Solution: ' + solution);
-				console.log('Str: ' + str);
-			}
-			reply(str);
-		});
-	}
+    method: 'GET',
+    path: '/getFood/{id}',
+    handler: function (request, reply) {
+        console.log('Server processing a /getFood request');
+        var id = request.params.id;
+
+        connection.query('SELECT * FROM foodapp.food WHERE menuId ='+id, function (error, result, fields) {
+            if (error)
+                throw error;
+            var output = [];
+            for (var x = 0; x < result.length; x++ ) {
+                 output.push(result[x]);
+            };
+            
+            reply (output);
+            
+            var solution = result;
+            console.log('The solution is: ', solution);
+        });
+       
+    }
 });
 
+// return all restaurants
+server.route({
+    method: 'GET',
+    path: '/getRest',
+    handler: function (request, reply) {
+        console.log('Server processing a /getRest request');
+
+        connection.query('SELECT * FROM foodapp.restaurant', function (error, result, fields) {
+            if (error)
+                throw error;
+            var output = [];
+            for (var x = 0; x < result.length; x++ ) {
+                 output.push(result[x]);
+            };
+            
+            reply (output);
+            
+            var solution = result;
+            console.log('The solution is: ', solution);
+        });
+       
+    }
+});
+
+
+// return all ingredients for a specific restuarant
+server.route({
+    method: 'GET',
+    path: '/getING/{id}',
+    handler: function (request, reply) {
+        console.log('Server processing a /getING request');
+        var id = request.params.id;
+
+        connection.query('SELECT * FROM foodapp.ingredients WHERE restID ='+id, function (error, result, fields) {
+            if (error)
+                throw error;
+            var output = [];
+            for (var x = 0; x < result.length; x++ ) {
+                 output.push(result[x]);
+            };
+            
+            reply (output);
+            
+            var solution = result;
+            console.log('The solution is: ', solution);
+        });
+       
+    }
+});
+
+
+server.route({
+    method: 'POST',
+    path: '/user',
+    handler: function (request, reply) {
+        reply('User Added: ' + request.payload['lName'] + ', ' + request.payload['fName']);
+    }
+});
+
+
+
+//add a new restaurant
 server.route({
 	method: 'POST',
-	path: '/user',
+	path: '/newRest',
 	handler: function(request, reply) {
-		connection.query('INSERT INTO foodapp.account(fName, lName, uName, password) VALUES (' + request.payload['fName'] + ', ' + request.payload['lName'] + ', ' + request.payload['uName'] + ', ' + request.payload['password'] + ';');
-		reply ('User Added: ' + request.payload['lName'] + ', ' + request.payload['fName'] + ' as ' + request.payload['uName'] + ' with password "' + request.payload['password'] + '"');
+        //var sql = 'INSERT INTO foodapp.restaurant(restName, restLocation, ownerId) VALUES (?)'; 
+        //var value = [[request.payload['restName'], request.payload['restLocation'], request.payload['ownerId']]];
+
+        var val = {
+            'restName': request.payload['restName'],
+            'restLocation': request.payload['restLocation'],
+            'ownerId': request.payload['ownerId'],
+            'restLink': request.payload['restLink'],
+            'restNews': request.payload['restNews'],
+            'restIMGLink': request.payload['restIMGLink'],
+            'restType': request.payload['restType']
+        };
+        var sql = 'INSERT INTO foodapp.restaurant SET ?';
+
+		connection.query(sql, val, function(err, result) {
+            if(err) {
+                throw err;
+            } 
+            reply ('Restaurant Added: ' + request.payload['restName'] + ', located at ' + request.payload['restLocation'] + ' and owned by ' + request.payload['ownerId'] );
+        });
+		
 	}
 });
 
+
+
+
+//Add a new food to database
 server.route({
-	method: 'GET',
-	path: '/user/{name}',
+	method: 'POST',
+	path: '/newFood',
 	handler: function(request, reply) {
-		reply ('Showing account details for ' + encodeURIComponent(request.params.name) + '.');
+        var sql = 'INSERT INTO foodapp.food(foodName, foodType, foodGroup, foodAmount, foodSold, foodCost) VALUES (?)'; 
+        var value = [[request.payload['foodName'], request.payload['foodType'], request.payload['foodGroup'], request.payload['foodSold'], request.payload['foodCost'], request.payload['menuId']]];
+
+		connection.query(sql, value, function(err, result) {
+            if(err) {
+                throw err;
+            } 
+            reply ('Food Added: ' + request.payload['foodName']);
+        });
+		
 	}
 });
 
+//Add a new food to database
+server.route({
+	method: 'PUT',
+	path: '/updateFood/{id}',
+	handler: function(request, reply) {
+        var id = request.params.id;
+        var sql = 'UPDATE foodapp.food SET foodSold = foodSold + ? WHERE idfood = '+id; 
+        var value = [[request.payload['foodSold']]];
+
+		connection.query(sql, value, function(err, result) {
+            if(err) {
+                throw err;
+            } 
+            
+        });
+
+        connection.query('SELECT foodName, foodSold, foodAmount FROM foodapp.food WHERE idfood = '+id, function(err, result) {
+            if(err) {
+                throw err;
+            } 
+            reply("Food updated: " +result[0].foodName+ ". Sold: "+result[0].foodSold+ " with " +result[0].foodAmount+ " remaining");
+        });
+		
+	}
+});
+
+//get owners
 server.route({
 	method: 'GET',
-	path: '/restaurants/{name}',
-	handler: function (request, reply) {
-		//Get the restaurants that are owned by {name}
-		console.log('Server processing /restaurants/{name} request');
-		reply('Displaying restaurants owned by ' + encodeURIComponent(request.params.name) + '!');
+	path: '/owners',
+	handler: function(request, reply) {
+        var sql = "SELECT fName FROM foodapp.account NATURAL JOIN foodapp.restaurant WHERE idaccount = ownerId GROUP BY fName";
+        var userStuff;
+        connection.query(sql, function(error, result, fields) {
+            if (error)
+                throw error;
+            var output = [];
+            for (var x = 0; x < result.length; x++ ) {
+                    output.push(result[x].fName);
+            };
+            
+            reply ('Owners are: ' + output);
+        });
+
 	}
 });
 
+//delete a restaurant
 server.route({
-	method: 'GET',
-	path: '/restaurants',
-	handler: function (request, reply) {
-		//Get a list of all restaurants
-		console.log('Server processing /restaurants request');
-		reply('Displaying a list of all restaurants!');
+	method: 'DELETE',
+	path: '/deleteRest/{id}',
+	handler: function(request, reply) {
+        var id = request.params.id;
+        var sql = "DELETE FROM foodapp.restaurant WHERE idrestaurant = "+id;
+        connection.query(sql, function(error, result, fields) {
+            if (error)
+                throw error;
+            
+            reply ('Restaurant Deleted');
+        });
+
 	}
 });
 
 
+//delete a food
+server.route({
+	method: 'DELETE',
+	path: '/deleteFood/{id}',
+	handler: function(request, reply) {
+        var id = request.params.id;
+        var sql = "DELETE FROM foodapp.food WHERE idfood = "+id;
+        connection.query(sql, function(error, result, fields) {
+            if (error)
+                throw error;
+            
+            reply ('Food Deleted');
+        });
+
+	}
+});
+
+
+
+
+//serves the server
 server.start((err) => {
 
     if (err) {
