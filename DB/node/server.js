@@ -39,7 +39,7 @@ server.route({
 	handler: function(request, reply) {
         var user = request.payload['username'];
         var pass = request.payload['password']; 
-        var sql = "SELECT * FROM foodapp.account WHERE username = ?";
+        var sql = "SELECT * FROM account WHERE username = ?";
         connection.query(sql, user, function(error, results, fields) {
             if (error)
                 throw error;
@@ -47,14 +47,14 @@ server.route({
                 if(results.length >0){
                     bcrypt.compare(pass, results[0].password, function(err, ress) {
                         if(!ress){
-                            reply("Email and password does not match");
+                            reply({'reply': 'Username and password do not match'});
                         }else{
-                            reply('successfully authenticated');
+                            reply(results[0]);
                         }
                     });
                 }
                 else{
-                    reply("Email does not exits");
+                    reply({'reply': 'Username does not exist'});
                 }
                 
             }
@@ -80,7 +80,7 @@ server.route({
             "password": hash
 
         }
-        var sql = 'INSERT INTO foodapp.account SET ?';
+        var sql = 'INSERT INTO account SET ?';
 
 		connection.query(sql, value, function(err, result) {
             if(err) {
@@ -106,7 +106,7 @@ server.route({
     handler: function (request, reply) {
         console.log('Server processing a /getData request');
 
-        connection.query('SELECT * FROM foodapp.account', function (error, result, fields) {
+        connection.query('SELECT * FROM account', function (error, result, fields) {
             if (error)
                 throw error;
             //Sends back to the client the value of 1 + 1
@@ -128,7 +128,7 @@ server.route({
 	handler: function(request, reply) {
         var name = request.params.username;
 
-        var sql = "SELECT * FROM foodapp.account WHERE username = ?";
+        var sql = "SELECT * FROM account WHERE username = ?";
         var userStuff;
         connection.query(sql, name, function(error, result, fields) {
             if (error)
@@ -148,14 +148,34 @@ server.route({
 	handler: function(request, reply) {
         var id = request.params.id;
 
-        var sql = "SELECT * FROM foodapp.restaurant WHERE idrestaurant = ?";
+        var sql = "SELECT * FROM restaurant WHERE idrestaurant = ?";
         var userStuff;
         connection.query(sql, id, function(error, result, fields) {
             if (error)
                 throw error;
             userStuff = result[0];
             console.log(userStuff);
-            reply (userStuff);
+            reply (result);
+        });
+
+	}
+});
+
+//get a restaurant
+server.route({
+	method: 'GET',
+	path: '/OwnerRest/{id}',
+	handler: function(request, reply) {
+        var id = request.params.id;
+
+        var sql = "SELECT * FROM restaurant WHERE ownerId = ?";
+        var userStuff;
+        connection.query(sql, id, function(error, result, fields) {
+            if (error)
+                throw error;
+            userStuff = result[0];
+            console.log(userStuff);
+            reply (result);
         });
 
 	}
@@ -168,15 +188,12 @@ server.route({
     handler: function (request, reply) {
         console.log('Server processing a /getFood request');
 
-        connection.query('SELECT * FROM foodapp.food', function (error, result, fields) {
+        connection.query('SELECT * FROM food', function (error, result, fields) {
             if (error)
                 throw error;
-            var output = [];
-            for (var x = 0; x < result.length; x++ ) {
-                 output.push(result[x]);
-            };
             
-            reply (output);
+            
+            reply (result);
             
             var solution = result;
             console.log('The solution is: ', solution);
@@ -193,15 +210,15 @@ server.route({
         console.log('Server processing a /getFood request');
         var id = request.params.id;
 
-        connection.query('SELECT * FROM foodapp.food WHERE menuId ='+id, function (error, result, fields) {
+        connection.query('SELECT * FROM food WHERE menuId ='+id, function (error, result, fields) {
             if (error)
                 throw error;
-            var output = [];
-            for (var x = 0; x < result.length; x++ ) {
-                 output.push(result[x]);
-            };
+            // var output = [];
+            // for (var x = 0; x < result.length; x++ ) {
+            //      output.push(result[x]);
+            // };
             
-            reply (output);
+            reply (result);
             
             var solution = result;
             console.log('The solution is: ', solution);
@@ -217,7 +234,7 @@ server.route({
     handler: function (request, reply) {
         console.log('Server processing a /getRest request');
 
-        connection.query('SELECT * FROM foodapp.restaurant', function (error, result, fields) {
+        connection.query('SELECT * FROM restaurant', function (error, result, fields) {
             if (error)
                 throw error;
             var output = [];
@@ -225,7 +242,7 @@ server.route({
                  output.push(result[x]);
             };
             
-            reply (output);
+            reply (result);
             
             var solution = result;
             console.log('The solution is: ', solution);
@@ -243,7 +260,7 @@ server.route({
         console.log('Server processing a /getING request');
         var id = request.params.id;
 
-        connection.query('SELECT * FROM foodapp.ingredients WHERE restID ='+id, function (error, result, fields) {
+        connection.query('SELECT * FROM ingredients WHERE restID ='+id, function (error, result, fields) {
             if (error)
                 throw error;
             var output = [];
@@ -251,7 +268,7 @@ server.route({
                  output.push(result[x]);
             };
             
-            reply (output);
+            reply (result);
             
             var solution = result;
             console.log('The solution is: ', solution);
@@ -286,9 +303,11 @@ server.route({
             'restLink': request.payload['restLink'],
             'restNews': request.payload['restNews'],
             'restIMGLink': request.payload['restIMGLink'],
-            'restType': request.payload['restType']
+            'restType': request.payload['restType'],
+            'zipCode': request.payload['zipCode'],
+            'city': request.payload['city']
         };
-        var sql = 'INSERT INTO foodapp.restaurant SET ?';
+        var sql = 'INSERT INTO restaurant SET ?';
 
 		connection.query(sql, val, function(err, result) {
             if(err) {
@@ -308,10 +327,20 @@ server.route({
 	method: 'POST',
 	path: '/newFood',
 	handler: function(request, reply) {
-        var sql = 'INSERT INTO foodapp.food(foodName, foodType, foodGroup, foodAmount, foodSold, foodCost) VALUES (?)'; 
-        var value = [[request.payload['foodName'], request.payload['foodType'], request.payload['foodGroup'], request.payload['foodSold'], request.payload['foodCost'], request.payload['menuId']]];
+    
+        var val = {
+            'foodName': request.payload['foodName'],
+            'foodType': request.payload['foodType'],
+            'foodSold': request.payload['foodSold'],
+            'foodCost': request.payload['foodCost'],
+            'menuId': request.payload['menuId'],
+            'rating': request.payload['rating'],
+            'foodING': request.payload['foodING']
+        };
 
-		connection.query(sql, value, function(err, result) {
+        var sql = 'INSERT INTO food SET ?';
+
+		connection.query(sql, val, function(err, result) {
             if(err) {
                 throw err;
             } 
@@ -327,8 +356,13 @@ server.route({
 	path: '/updateFood/{id}',
 	handler: function(request, reply) {
         var id = request.params.id;
-        var sql = 'UPDATE foodapp.food SET foodSold = foodSold + ? WHERE idfood = '+id; 
-        var value = [[request.payload['foodSold']]];
+        var sql = 'UPDATE food SET ? WHERE idfood = '+id; 
+        //var value = [[request.payload['foodSold'], request.payload['rating'], request.payload['foodCost']]];
+        var value = {
+            'foodSold': request.payload['foodSold'], 
+            'rating': request.payload['rating'], 
+            'foodCost': request.payload['foodCost']
+        }
 
 		connection.query(sql, value, function(err, result) {
             if(err) {
@@ -337,11 +371,11 @@ server.route({
             
         });
 
-        connection.query('SELECT foodName, foodSold, foodAmount FROM foodapp.food WHERE idfood = '+id, function(err, result) {
+        connection.query('SELECT foodName, foodSold FROM food WHERE idfood = '+id, function(err, result) {
             if(err) {
                 throw err;
             } 
-            reply("Food updated: " +result[0].foodName+ ". Sold: "+result[0].foodSold+ " with " +result[0].foodAmount+ " remaining");
+            reply("Food updated: " +result[0].foodName+ ". Sold: "+result[0].foodSold);
         });
 		
 	}
@@ -352,17 +386,13 @@ server.route({
 	method: 'GET',
 	path: '/owners',
 	handler: function(request, reply) {
-        var sql = "SELECT fName FROM foodapp.account NATURAL JOIN foodapp.restaurant WHERE idaccount = ownerId GROUP BY fName";
+        var sql = "SELECT fName FROM account NATURAL JOIN restaurant WHERE idaccount = ownerId GROUP BY fName";
         var userStuff;
         connection.query(sql, function(error, result, fields) {
             if (error)
                 throw error;
-            var output = [];
-            for (var x = 0; x < result.length; x++ ) {
-                    output.push(result[x].fName);
-            };
             
-            reply ('Owners are: ' + output);
+            reply (result);
         });
 
 	}
@@ -374,7 +404,7 @@ server.route({
 	path: '/deleteRest/{id}',
 	handler: function(request, reply) {
         var id = request.params.id;
-        var sql = "DELETE FROM foodapp.restaurant WHERE idrestaurant = "+id;
+        var sql = "DELETE FROM restaurant WHERE idrestaurant = "+id;
         connection.query(sql, function(error, result, fields) {
             if (error)
                 throw error;
@@ -392,7 +422,7 @@ server.route({
 	path: '/deleteFood/{id}',
 	handler: function(request, reply) {
         var id = request.params.id;
-        var sql = "DELETE FROM foodapp.food WHERE idfood = "+id;
+        var sql = "DELETE FROM food WHERE idfood = "+id;
         connection.query(sql, function(error, result, fields) {
             if (error)
                 throw error;
